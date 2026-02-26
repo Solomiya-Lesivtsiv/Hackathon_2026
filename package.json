@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "api": "python api/main.py",
+    "start": "start /b python api/main.py && vite"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
