@@ -1,17 +1,22 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Link } from "react-router";
-import { ChevronDown, ChevronUp, Upload, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Upload, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Badge } from "../components/ui/badge";
-import { mockOrders, Order } from "../data/orders";
+import { fetchOrders, type Order } from "../services/api";
 
 export function OrdersList() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  
+
   // Filter states
   const [filters, setFilters] = useState({
     dateFrom: "",
@@ -21,6 +26,38 @@ export function OrdersList() {
     taxRate: "all",
     searchId: "",
   });
+
+  // Applied filters (only update when user clicks Apply)
+  const [appliedFilters, setAppliedFilters] = useState(filters);
+
+  const loadOrders = async (page: number, limit: number, f: typeof filters) => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: String(limit),
+      };
+      if (f.searchId) params.searchId = f.searchId;
+      if (f.dateFrom) params.dateFrom = f.dateFrom;
+      if (f.dateTo) params.dateTo = f.dateTo;
+      if (f.subtotalMin) params.subtotalMin = f.subtotalMin;
+      if (f.subtotalMax) params.subtotalMax = f.subtotalMax;
+      if (f.taxRate && f.taxRate !== "all") params.taxRate = f.taxRate;
+
+      const data = await fetchOrders(params);
+      setOrders(data.orders);
+      setTotalCount(data.total);
+      setTotalPages(data.totalPages);
+    } catch (err) {
+      console.error("Failed to load orders:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders(currentPage, rowsPerPage, appliedFilters);
+  }, [currentPage, rowsPerPage, appliedFilters]);
 
   const toggleRowExpansion = (orderId: string) => {
     const newExpanded = new Set(expandedRows);
@@ -34,65 +71,22 @@ export function OrdersList() {
 
   const applyFilters = () => {
     setCurrentPage(1);
+    setAppliedFilters({ ...filters });
   };
 
   const clearFilters = () => {
-    setFilters({
+    const empty = {
       dateFrom: "",
       dateTo: "",
       subtotalMin: "",
       subtotalMax: "",
       taxRate: "all",
       searchId: "",
-    });
+    };
+    setFilters(empty);
     setCurrentPage(1);
+    setAppliedFilters(empty);
   };
-
-  // Filter logic
-  const filteredOrders = useMemo(() => {
-    return mockOrders.filter((order) => {
-      // Search by ID
-      if (filters.searchId && !order.id.toLowerCase().includes(filters.searchId.toLowerCase())) {
-        return false;
-      }
-
-      // Date range
-      if (filters.dateFrom) {
-        const orderDate = new Date(order.timestamp);
-        const fromDate = new Date(filters.dateFrom);
-        if (orderDate < fromDate) return false;
-      }
-      if (filters.dateTo) {
-        const orderDate = new Date(order.timestamp);
-        const toDate = new Date(filters.dateTo);
-        toDate.setHours(23, 59, 59, 999);
-        if (orderDate > toDate) return false;
-      }
-
-      // Subtotal range
-      if (filters.subtotalMin && order.subtotal < parseFloat(filters.subtotalMin)) {
-        return false;
-      }
-      if (filters.subtotalMax && order.subtotal > parseFloat(filters.subtotalMax)) {
-        return false;
-      }
-
-      // Tax rate filter
-      if (filters.taxRate !== "all") {
-        const targetRate = parseFloat(filters.taxRate);
-        if (Math.abs(order.taxRate - targetRate) > 0.01) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [filters]);
-
-  // Pagination
-  const totalPages = Math.ceil(filteredOrders.length / rowsPerPage);
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedOrders = filteredOrders.slice(startIndex, startIndex + rowsPerPage);
 
   const formatDate = (isoString: string) => {
     const date = new Date(isoString);
@@ -118,7 +112,7 @@ export function OrdersList() {
         <div>
           <h1 className="mb-1">Orders</h1>
           <p className="text-muted-foreground">
-            {filteredOrders.length} order{filteredOrders.length !== 1 ? "s" : ""} found
+            {totalCount} order{totalCount !== 1 ? "s" : ""} found
           </p>
         </div>
         <div className="flex gap-2">
@@ -196,8 +190,13 @@ export function OrdersList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Rates</SelectItem>
+                <SelectItem value="7">7%</SelectItem>
+                <SelectItem value="7.5">7.5%</SelectItem>
                 <SelectItem value="8">8%</SelectItem>
-                <SelectItem value="8.25">8.25%</SelectItem>
+                <SelectItem value="8.125">8.125%</SelectItem>
+                <SelectItem value="8.375">8.375%</SelectItem>
+                <SelectItem value="8.625">8.625%</SelectItem>
+                <SelectItem value="8.75">8.75%</SelectItem>
                 <SelectItem value="8.875">8.875%</SelectItem>
               </SelectContent>
             </Select>
@@ -223,268 +222,289 @@ export function OrdersList() {
         </div>
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      )}
+
       {/* Data Table */}
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
-        {/* Desktop Table View */}
-        <div className="overflow-x-auto hidden md:block">
-          <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="text-left py-3 px-4 text-sm font-medium">#</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Order ID</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Timestamp</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Coordinates</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Subtotal</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Tax Rate</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Tax Amount</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Total</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Jurisdictions</th>
-                <th className="text-left py-3 px-4 text-sm font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedOrders.map((order, index) => (
-                <Fragment key={order.id}>
-                  <tr
-                    className={`border-b border-border hover:bg-accent/50 transition-colors ${
-                      index % 2 === 0 ? "bg-card" : "bg-muted/20"
-                    }`}
-                  >
-                    <td className="py-3 px-4 text-sm text-muted-foreground">
-                      {startIndex + index + 1}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="font-mono text-sm font-medium">{order.id}</span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-muted-foreground">
-                      {formatDate(order.timestamp)}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-mono text-xs">
-                        <div>{order.latitude.toFixed(6)},</div>
-                        <div>{order.longitude.toFixed(6)}</div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm">${order.subtotal.toFixed(2)}</td>
-                    <td className="py-3 px-4 text-sm font-medium">{order.taxRate.toFixed(3)}%</td>
-                    <td className="py-3 px-4 text-sm">${order.taxAmount.toFixed(2)}</td>
-                    <td className="py-3 px-4 font-bold" style={{ color: order.taxAmount > 0 ? '#22C55E' : '#6B7280' }}>
-                      ${order.total.toFixed(2)}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex flex-wrap gap-1">
-                        {order.jurisdictions.map((j, i) => (
-                          <Badge
-                            key={i}
-                            variant="secondary"
-                            className={`text-xs ${getBadgeColor(j.type)} border-0`}
-                          >
-                            {j.type}
-                          </Badge>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleRowExpansion(order.id)}
-                        className="gap-1"
-                      >
-                        {expandedRows.has(order.id) ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                        Details
-                      </Button>
+      {!loading && (
+        <div className="bg-card rounded-lg border border-border overflow-hidden">
+          {/* Desktop Table View */}
+          <div className="overflow-x-auto hidden md:block">
+            <table className="w-full">
+              <thead className="bg-muted/50 border-b border-border">
+                <tr>
+                  <th className="text-left py-3 px-4 text-sm font-medium">#</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Order ID</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Timestamp</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Coordinates</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Subtotal</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Tax Rate</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Tax Amount</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Total</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Jurisdictions</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="text-center py-12 text-muted-foreground">
+                      No orders found. Import a CSV or create an order.
                     </td>
                   </tr>
-                  {expandedRows.has(order.id) && (
-                    <tr className="bg-muted/30">
-                      <td colSpan={10} className="py-4 px-8">
-                        <div className="text-sm">
-                          <h4 className="font-medium mb-3">Tax Breakdown</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            <div>
-                              <div className="text-muted-foreground text-xs mb-1">State Rate</div>
-                              <div className="font-medium">
-                                {order.taxBreakdown.state.rate}% → ${order.taxBreakdown.state.amount.toFixed(2)}
+                )}
+                {orders.map((order, index) => (
+                  <Fragment key={order.id}>
+                    <tr
+                      className={`border-b border-border hover:bg-accent/50 transition-colors ${
+                        index % 2 === 0 ? "bg-card" : "bg-muted/20"
+                      }`}
+                    >
+                      <td className="py-3 px-4 text-sm text-muted-foreground">
+                        {(currentPage - 1) * rowsPerPage + index + 1}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-sm font-medium">{order.id}</span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-muted-foreground">
+                        {formatDate(order.timestamp)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-mono text-xs">
+                          <div>{order.latitude.toFixed(6)},</div>
+                          <div>{order.longitude.toFixed(6)}</div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm">${order.subtotal.toFixed(2)}</td>
+                      <td className="py-3 px-4 text-sm font-medium">{order.taxRate.toFixed(3)}%</td>
+                      <td className="py-3 px-4 text-sm">${order.taxAmount.toFixed(2)}</td>
+                      <td className="py-3 px-4 font-bold" style={{ color: order.taxAmount > 0 ? '#22C55E' : '#6B7280' }}>
+                        ${order.total.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1">
+                          {order.jurisdictions.map((j, i) => (
+                            <Badge
+                              key={i}
+                              variant="secondary"
+                              className={`text-xs ${getBadgeColor(j.type)} border-0`}
+                            >
+                              {j.type}
+                            </Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleRowExpansion(order.id)}
+                          className="gap-1"
+                        >
+                          {expandedRows.has(order.id) ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                          Details
+                        </Button>
+                      </td>
+                    </tr>
+                    {expandedRows.has(order.id) && (
+                      <tr className="bg-muted/30">
+                        <td colSpan={10} className="py-4 px-8">
+                          <div className="text-sm">
+                            <h4 className="font-medium mb-3">Tax Breakdown</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                              <div>
+                                <div className="text-muted-foreground text-xs mb-1">State Rate</div>
+                                <div className="font-medium">
+                                  {order.taxBreakdown.state.rate}% → ${order.taxBreakdown.state.amount.toFixed(2)}
+                                </div>
                               </div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground text-xs mb-1">County Rate</div>
-                              <div className="font-medium">
-                                {order.taxBreakdown.county.rate}% → ${order.taxBreakdown.county.amount.toFixed(2)}
+                              <div>
+                                <div className="text-muted-foreground text-xs mb-1">County Rate</div>
+                                <div className="font-medium">
+                                  {order.taxBreakdown.county.rate}% → ${order.taxBreakdown.county.amount.toFixed(2)}
+                                </div>
                               </div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground text-xs mb-1">City Rate</div>
-                              <div className="font-medium">
-                                {order.taxBreakdown.city.rate}% → ${order.taxBreakdown.city.amount.toFixed(2)}
+                              <div>
+                                <div className="text-muted-foreground text-xs mb-1">City Rate</div>
+                                <div className="font-medium">
+                                  {order.taxBreakdown.city.rate}% → ${order.taxBreakdown.city.amount.toFixed(2)}
+                                </div>
                               </div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground text-xs mb-1">Special Rate</div>
-                              <div className="font-medium">
-                                {order.taxBreakdown.special.rate}% → ${order.taxBreakdown.special.amount.toFixed(2)}
+                              <div>
+                                <div className="text-muted-foreground text-xs mb-1">Special Rate (MCTD)</div>
+                                <div className="font-medium">
+                                  {order.taxBreakdown.special.rate}% → ${order.taxBreakdown.special.amount.toFixed(2)}
+                                </div>
                               </div>
-                            </div>
-                            <div className="border-l border-border pl-4">
-                              <div className="text-muted-foreground text-xs mb-1">Composite Tax</div>
-                              <div className="font-bold text-primary">
-                                {order.taxBreakdown.composite}%
+                              <div className="border-l border-border pl-4">
+                                <div className="text-muted-foreground text-xs mb-1">Composite Tax</div>
+                                <div className="font-bold text-primary">
+                                  {order.taxBreakdown.composite}%
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Card View */}
-        <div className="md:hidden space-y-3 p-3">
-          {paginatedOrders.map((order, index) => (
-            <div key={order.id} className="border border-border rounded-lg p-4 bg-card">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-mono text-sm font-bold mb-1">{order.id}</div>
-                  <div className="text-xs text-muted-foreground">{formatDate(order.timestamp)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold text-lg" style={{ color: order.taxAmount > 0 ? '#22C55E' : '#6B7280' }}>
-                    ${order.total.toFixed(2)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{order.taxRate.toFixed(3)}% tax</div>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-1 mb-3">
-                {order.jurisdictions.map((j, i) => (
-                  <Badge
-                    key={i}
-                    variant="secondary"
-                    className={`text-xs ${getBadgeColor(j.type)} border-0`}
-                  >
-                    {j.type}
-                  </Badge>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
-              </div>
+              </tbody>
+            </table>
+          </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                <div>
-                  <span className="text-muted-foreground">Subtotal:</span> ${order.subtotal.toFixed(2)}
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3 p-3">
+            {orders.length === 0 && (
+              <p className="text-center py-8 text-muted-foreground">
+                No orders found. Import a CSV or create an order.
+              </p>
+            )}
+            {orders.map((order) => (
+              <div key={order.id} className="border border-border rounded-lg p-4 bg-card">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="font-mono text-sm font-bold mb-1">{order.id}</div>
+                    <div className="text-xs text-muted-foreground">{formatDate(order.timestamp)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-lg" style={{ color: order.taxAmount > 0 ? '#22C55E' : '#6B7280' }}>
+                      ${order.total.toFixed(2)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{order.taxRate.toFixed(3)}% tax</div>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Tax:</span> ${order.taxAmount.toFixed(2)}
-                </div>
-              </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => toggleRowExpansion(order.id)}
-                className="w-full gap-2"
-              >
-                {expandedRows.has(order.id) ? (
-                  <>
-                    <ChevronUp className="h-4 w-4" />
-                    Hide Details
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="h-4 w-4" />
-                    Show Details
-                  </>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {order.jurisdictions.map((j, i) => (
+                    <Badge
+                      key={i}
+                      variant="secondary"
+                      className={`text-xs ${getBadgeColor(j.type)} border-0`}
+                    >
+                      {j.type}
+                    </Badge>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                  <div>
+                    <span className="text-muted-foreground">Subtotal:</span> ${order.subtotal.toFixed(2)}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tax:</span> ${order.taxAmount.toFixed(2)}
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toggleRowExpansion(order.id)}
+                  className="w-full gap-2"
+                >
+                  {expandedRows.has(order.id) ? (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Hide Details
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Show Details
+                    </>
+                  )}
+                </Button>
+
+                {expandedRows.has(order.id) && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <h4 className="font-medium text-sm mb-2">Tax Breakdown</h4>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">State Rate:</span>
+                        <span className="font-medium">{order.taxBreakdown.state.rate}% → ${order.taxBreakdown.state.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">County Rate:</span>
+                        <span className="font-medium">{order.taxBreakdown.county.rate}% → ${order.taxBreakdown.county.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">City Rate:</span>
+                        <span className="font-medium">{order.taxBreakdown.city.rate}% → ${order.taxBreakdown.city.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Special Rate (MCTD):</span>
+                        <span className="font-medium">{order.taxBreakdown.special.rate}% → ${order.taxBreakdown.special.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-border">
+                        <span className="font-medium">Composite Tax:</span>
+                        <span className="font-bold text-primary">{order.taxBreakdown.composite}%</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-border font-mono text-[10px] text-muted-foreground">
+                      <div>{order.latitude.toFixed(6)}, {order.longitude.toFixed(6)}</div>
+                    </div>
+                  </div>
                 )}
-              </Button>
-
-              {expandedRows.has(order.id) && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <h4 className="font-medium text-sm mb-2">Tax Breakdown</h4>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">State Rate:</span>
-                      <span className="font-medium">{order.taxBreakdown.state.rate}% → ${order.taxBreakdown.state.amount.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">County Rate:</span>
-                      <span className="font-medium">{order.taxBreakdown.county.rate}% → ${order.taxBreakdown.county.amount.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">City Rate:</span>
-                      <span className="font-medium">{order.taxBreakdown.city.rate}% → ${order.taxBreakdown.city.amount.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Special Rate:</span>
-                      <span className="font-medium">{order.taxBreakdown.special.rate}% → ${order.taxBreakdown.special.amount.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between pt-2 border-t border-border">
-                      <span className="font-medium">Composite Tax:</span>
-                      <span className="font-bold text-primary">{order.taxBreakdown.composite}%</span>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-2 border-t border-border font-mono text-[10px] text-muted-foreground">
-                    <div>{order.latitude.toFixed(6)}, {order.longitude.toFixed(6)}</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Rows per page:</span>
-            <Select
-              value={String(rowsPerPage)}
-              onValueChange={(value) => {
-                setRowsPerPage(Number(value));
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="w-20 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-              </SelectContent>
-            </Select>
+              </div>
+            ))}
           </div>
 
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Rows per page:</span>
+              <Select
+                value={String(rowsPerPage)}
+                onValueChange={(value) => {
+                  setRowsPerPage(Number(value));
+                  setCurrentPage(1);
+                }}
               >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
+                <SelectTrigger className="w-20 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

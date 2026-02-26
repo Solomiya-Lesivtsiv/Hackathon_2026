@@ -1,82 +1,103 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional
-from datetime import datetime
+"""
+Pydantic models for the BetterMe Drone Delivery Tax Admin API.
+Models match the frontend TypeScript interfaces exactly.
+"""
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
+
+
+# ── Tax models (match frontend TaxBreakdown interface) ──────────────────────
+
+class TaxComponent(BaseModel):
+    """Single tax layer: rate in PERCENT (e.g. 4.0) and dollar amount."""
+    rate: float
+    amount: float
 
 
 class TaxBreakdown(BaseModel):
-    state_tax: float
-    state_rate: float
-    county_tax: float
-    county_rate: float
-    city_tax: float
-    city_rate: float
-    special_tax: float
-    special_rate: float
-    total_tax: float
-    total_rate: float
-    jurisdiction: str
-    county: str
-    city: str
+    """
+    Matches frontend:
+      taxBreakdown: {
+        state:   { rate: number; amount: number };
+        county:  { rate: number; amount: number };
+        city:    { rate: number; amount: number };
+        special: { rate: number; amount: number };
+        composite: number;
+      }
+    All rates are in PERCENT (e.g. 4.0 not 0.04).
+    """
+    state: TaxComponent
+    county: TaxComponent
+    city: TaxComponent
+    special: TaxComponent       # MCTD surcharge (0.375% in MCTD zone)
+    composite: float            # sum of all rates
 
 
-class OrderCreate(BaseModel):
-    order_id: str
-    customer_name: str
-    customer_email: EmailStr
-    customer_phone: str = ""
-    delivery_address: str
-    delivery_lat: float = Field(..., ge=-90, le=90)
-    delivery_lng: float = Field(..., ge=-180, le=180)
-    subtotal: float = Field(..., gt=0)
-    priority: str = Field(..., pattern="^(standard|express|urgent)$")
-    status: str = Field(default="pending", pattern="^(pending|processing|in_transit|delivered|cancelled)$")
-    items: List[str] = []
+# ── Jurisdiction model ──────────────────────────────────────────────────────
+
+class Jurisdiction(BaseModel):
+    """
+    Matches frontend:
+      { name: string; type: "State" | "County" | "City" | "Special" }
+    """
+    name: str
+    type: Literal["State", "County", "City", "Special"]
 
 
-class OrderUpdate(BaseModel):
-    customer_name: Optional[str] = None
-    customer_email: Optional[EmailStr] = None
-    customer_phone: Optional[str] = None
-    delivery_address: Optional[str] = None
-    delivery_lat: Optional[float] = Field(None, ge=-90, le=90)
-    delivery_lng: Optional[float] = Field(None, ge=-180, le=180)
-    subtotal: Optional[float] = Field(None, gt=0)
-    priority: Optional[str] = Field(None, pattern="^(standard|express|urgent)$")
-    status: Optional[str] = Field(None, pattern="^(pending|processing|in_transit|delivered|cancelled)$")
-    items: Optional[List[str]] = None
-    tax_breakdown: Optional[TaxBreakdown] = None
-
+# ── Order model (what GET /orders returns) ──────────────────────────────────
 
 class Order(BaseModel):
-    id: str
-    order_id: str
-    customer_name: str
-    customer_email: str
-    customer_phone: str
-    delivery_address: str
-    delivery_lat: float
-    delivery_lng: float
+    """
+    Matches frontend Order interface exactly.
+    """
+    id: str                         # e.g. "ORD-01000"
+    timestamp: str                  # ISO 8601
+    latitude: float
+    longitude: float
     subtotal: float
-    tax_breakdown: TaxBreakdown
+    taxRate: float                  # composite rate in %
+    taxAmount: float
     total: float
-    priority: str
-    status: str
-    items: List[str]
-    created_at: datetime
-    updated_at: datetime
+    jurisdictions: List[Jurisdiction]
+    taxBreakdown: TaxBreakdown
+
+
+# ── Request models ──────────────────────────────────────────────────────────
+
+class OrderCreate(BaseModel):
+    """POST /orders — manual order creation."""
+    latitude: float = Field(..., ge=40.0, le=45.1)
+    longitude: float = Field(..., ge=-80.0, le=-71.0)
+    subtotal: float = Field(..., gt=0)
+    timestamp: Optional[str] = None     # ISO 8601; defaults to now
 
 
 class TaxCalculationRequest(BaseModel):
-    latitude: float = Field(..., ge=-90, le=90)
-    longitude: float = Field(..., ge=-180, le=180)
+    """POST /orders/calculate-tax — preview tax for coordinates."""
+    latitude: float
+    longitude: float
     subtotal: float = Field(..., gt=0)
 
 
-class OrderFilters(BaseModel):
-    search: Optional[str] = None
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    min_amount: Optional[float] = None
-    max_amount: Optional[float] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+# ── Response models ─────────────────────────────────────────────────────────
+
+class OrdersListResponse(BaseModel):
+    orders: List[Order]
+    total: int
+    page: int
+    limit: int
+    totalPages: int
+
+
+class ImportResponse(BaseModel):
+    success: int
+    failed: int
+    orders: List[Order]
+    errors: List[dict]
+
+
+class StatsResponse(BaseModel):
+    totalOrders: int
+    totalRevenue: float
+    totalTax: float
+    avgTaxRate: float
