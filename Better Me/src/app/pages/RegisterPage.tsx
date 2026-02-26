@@ -34,7 +34,7 @@ export default function RegisterPage() {
     const result = await register(name, email, password);
 
     if (result.success) {
-      navigate('/dashboard');
+      navigate('/');
     } else {
       setError(result.error || 'Registration failed');
     }

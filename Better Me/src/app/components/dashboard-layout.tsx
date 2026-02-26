@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   Plane,
   User,
-  Shield
+  Shield,
+  Users
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -30,8 +31,9 @@ export function DashboardLayout() {
     { path: "/profile", label: "Profile", icon: User },
   ];
 
-  // Add Admin menu item only for admin users
+  // Add Admin menu items only for admin users
   if (isAdmin) {
+    navItems.push({ path: "/user-management", label: "User Management", icon: Users });
     navItems.push({ path: "/admin", label: "Admin Panel", icon: Shield });
   }
 
@@ -175,7 +177,7 @@ export function DashboardLayout() {
 
       {/* Bottom Navigation - Mobile */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-        <div className={`grid ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} h-16`}>
+        <div className={`grid ${isAdmin ? 'grid-cols-7' : 'grid-cols-5'} h-16`}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);

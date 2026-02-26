@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MapPin, DollarSign, Calendar, Navigation } from "lucide-react";
+import { MapPin, DollarSign, Calendar, Navigation, Locate } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -62,14 +62,43 @@ export function CreateOrder() {
     setSubmitting(false);
   };
 
+  const handleMapClick = (lat: number, lng: number) => {
+    setLatitude(lat.toFixed(6));
+    setLongitude(lng.toFixed(6));
+    toast.success("Location selected on map");
+  };
+
+  const handleUseCurrentLocation = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLatitude(position.coords.latitude.toFixed(6));
+          setLongitude(position.coords.longitude.toFixed(6));
+          toast.success("Current location detected");
+        },
+        (error) => {
+          toast.error("Unable to get your location");
+        }
+      );
+    } else {
+      toast.error("Geolocation is not supported by your browser");
+    }
+  };
+
   const isValidCoordinate = latitude && longitude && !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude));
+  
+  // Default center on New York State
+  const defaultCenter: [number, number] = [40.7128, -74.0060]; // NYC
+  const mapCenter: [number, number] = isValidCoordinate 
+    ? [parseFloat(latitude), parseFloat(longitude)]
+    : defaultCenter;
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="mb-2">Create New Order</h1>
         <p className="text-muted-foreground">
-          Manually add a single drone delivery order with automatic tax calculation
+          Click on the map or enter coordinates to set delivery location with automatic tax calculation
         </p>
       </div>
 
@@ -81,45 +110,50 @@ export function CreateOrder() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <Label htmlFor="latitude" className="flex items-center gap-2 mb-2">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  Latitude
-                </Label>
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="0.000001"
-                  placeholder="e.g. 40.712776"
-                  value={latitude}
-                  onChange={(e) => setLatitude(e.target.value)}
-                  required
-                  className="bg-input-background"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Delivery location latitude (NY State: 40.5 - 45.0)
-                </p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Label htmlFor="latitude" className="flex items-center gap-2 mb-2">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    Latitude
+                  </Label>
+                  <Input
+                    id="latitude"
+                    type="number"
+                    step="0.000001"
+                    placeholder="e.g. 40.712776"
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value)}
+                    required
+                    className="bg-input-background"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="longitude" className="flex items-center gap-2 mb-2">
+                    <Navigation className="h-4 w-4 text-primary" />
+                    Longitude
+                  </Label>
+                  <Input
+                    id="longitude"
+                    type="number"
+                    step="0.000001"
+                    placeholder="e.g. -73.989421"
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value)}
+                    required
+                    className="bg-input-background"
+                  />
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="longitude" className="flex items-center gap-2 mb-2">
-                  <Navigation className="h-4 w-4 text-primary" />
-                  Longitude
-                </Label>
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="0.000001"
-                  placeholder="e.g. -73.989421"
-                  value={longitude}
-                  onChange={(e) => setLongitude(e.target.value)}
-                  required
-                  className="bg-input-background"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Delivery location longitude (NY State: -80.0 - -71.0)
-                </p>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleUseCurrentLocation}
+              >
+                <Locate className="h-4 w-4" />
+                Use Current Location
+              </Button>
 
               <div>
                 <Label htmlFor="subtotal" className="flex items-center gap-2 mb-2">
@@ -173,46 +207,43 @@ export function CreateOrder() {
 
         {/* Preview Panel */}
         <div className="space-y-6">
-          {/* Map Preview */}
+          {/* Interactive Map */}
           <Card>
             <CardHeader>
-              <CardTitle>Location Preview</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Location Preview</span>
+                <span className="text-xs font-normal text-muted-foreground">Enter coordinates above</span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {isValidCoordinate ? (
-                <div className="aspect-video bg-muted rounded-lg flex items-center justify-center relative overflow-hidden">
-                  {/* Simple NY State outline mockup */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <svg viewBox="0 0 200 120" className="w-full h-full opacity-20">
-                      <path
-                        d="M20,60 L40,50 L60,45 L80,40 L100,42 L120,50 L140,55 L160,58 L170,62 L175,70 L172,80 L165,85 L150,88 L130,90 L110,88 L90,85 L70,82 L50,78 L35,72 L25,68 Z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                    </svg>
-                  </div>
-                  <div className="relative z-10 text-center">
-                    <MapPin className="h-12 w-12 text-primary mx-auto mb-2" />
-                    <div className="font-mono text-sm">
-                      <div>{parseFloat(latitude).toFixed(6)}</div>
-                      <div>{parseFloat(longitude).toFixed(6)}</div>
-                    </div>
-                    {taxCalculation && (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        {taxCalculation.jurisdiction}
+              <div className="aspect-video rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+                <div className="text-center p-4">
+                  {isValidCoordinate ? (
+                    <div className="space-y-2">
+                      <MapPin className="h-12 w-12 mx-auto text-primary opacity-60" />
+                      <div className="font-medium">Delivery Location Set</div>
+                      <div className="text-sm text-muted-foreground">
+                        {parseFloat(latitude).toFixed(6)}, {parseFloat(longitude).toFixed(6)}
                       </div>
-                    )}
-                  </div>
+                      {taxCalculation && (
+                        <div className="text-xs text-primary mt-2">
+                          {taxCalculation.jurisdiction}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Navigation className="h-12 w-12 mx-auto text-muted-foreground opacity-30" />
+                      <div className="text-sm text-muted-foreground">
+                        Enter coordinates above or use current location
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-                  <div className="text-center text-muted-foreground">
-                    <MapPin className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Enter coordinates to preview location</p>
-                  </div>
-                </div>
-              )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Enter GPS coordinates to set delivery location
+              </p>
             </CardContent>
           </Card>
 
@@ -274,7 +305,7 @@ export function CreateOrder() {
                   <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">
                     {!latitude || !longitude
-                      ? "Enter coordinates to calculate tax"
+                      ? "Click on map or enter coordinates to calculate tax"
                       : "Enter subtotal amount"}
                   </p>
                 </div>

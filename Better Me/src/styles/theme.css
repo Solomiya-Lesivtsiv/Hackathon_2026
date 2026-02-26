@@ -196,4 +196,9 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  /* Leaflet map styles */
+  .leaflet-container {
+    font-family: inherit;
+  }
 }

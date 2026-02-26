@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router";
 import { ChevronDown, ChevronUp, Upload, Plus, X } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -243,9 +243,11 @@ export function OrdersList() {
               </tr>
             </thead>
             <tbody>
-              {paginatedOrders.map((order, index) => (
-                <Fragment key={order.id}>
+              {paginatedOrders.flatMap((order, index) => {
+                const isExpanded = expandedRows.has(order.id);
+                const rows = [
                   <tr
+                    key={`${order.id}-main`}
                     className={`border-b border-border hover:bg-accent/50 transition-colors ${
                       index % 2 === 0 ? "bg-card" : "bg-muted/20"
                     }`}
@@ -291,7 +293,7 @@ export function OrdersList() {
                         onClick={() => toggleRowExpansion(order.id)}
                         className="gap-1"
                       >
-                        {expandedRows.has(order.id) ? (
+                        {isExpanded ? (
                           <ChevronUp className="h-4 w-4" />
                         ) : (
                           <ChevronDown className="h-4 w-4" />
@@ -300,8 +302,11 @@ export function OrdersList() {
                       </Button>
                     </td>
                   </tr>
-                  {expandedRows.has(order.id) && (
-                    <tr className="bg-muted/30">
+                ];
+                
+                if (isExpanded) {
+                  rows.push(
+                    <tr key={`${order.id}-details`} className="bg-muted/30">
                       <td colSpan={10} className="py-4 px-8">
                         <div className="text-sm">
                           <h4 className="font-medium mb-3">Tax Breakdown</h4>
@@ -340,9 +345,11 @@ export function OrdersList() {
                         </div>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
+                  );
+                }
+                
+                return rows;
+              })}
             </tbody>
           </table>
         </div>
