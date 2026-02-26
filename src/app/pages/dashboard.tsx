@@ -1,14 +1,45 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Package, Upload, PlusCircle, TrendingUp, DollarSign, MapPin } from "lucide-react";
+import { Package, Upload, PlusCircle, TrendingUp, DollarSign, MapPin, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { mockOrders } from "../data/orders";
+import { fetchStats, fetchOrders, type Stats, type Order } from "../services/api";
 
 export function Dashboard() {
-  const totalOrders = mockOrders.length;
-  const totalRevenue = mockOrders.reduce((sum, order) => sum + order.total, 0);
-  const totalTax = mockOrders.reduce((sum, order) => sum + order.taxAmount, 0);
-  const avgTaxRate = totalTax / mockOrders.reduce((sum, order) => sum + order.subtotal, 0) * 100;
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [s, r] = await Promise.all([
+          fetchStats(),
+          fetchOrders({ page: "1", limit: "5" }),
+        ]);
+        setStats(s);
+        setRecentOrders(r.orders);
+      } catch (err) {
+        console.error("Failed to load dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const totalOrders = stats?.totalOrders ?? 0;
+  const totalRevenue = stats?.totalRevenue ?? 0;
+  const totalTax = stats?.totalTax ?? 0;
+  const avgTaxRate = stats?.avgTaxRate ?? 0;
 
   return (
     <div className="max-w-7xl">
@@ -28,7 +59,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalOrders.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">Deliveries completed</p>
+            <p className="text-xs text-muted-foreground mt-1">Deliveries processed</p>
           </CardContent>
         </Card>
 
@@ -68,7 +99,7 @@ export function Dashboard() {
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">4+</div>
+            <div className="text-2xl font-bold">24+</div>
             <p className="text-xs text-muted-foreground mt-1">NY State counties</p>
           </CardContent>
         </Card>
@@ -129,27 +160,33 @@ export function Dashboard() {
           </Link>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {mockOrders.slice(0, 5).map((order) => (
-              <div key={order.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <div className="font-medium font-mono text-sm">{order.id}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(order.timestamp).toLocaleDateString()} · {order.jurisdictions[1].name}
+          {recentOrders.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4">
+              No orders yet. Import a CSV or create one manually.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                      <Package className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <div className="font-medium font-mono text-sm">{order.id}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(order.timestamp).toLocaleDateString()} · {order.jurisdictions[1]?.name ?? order.jurisdictions[0]?.name}
+                      </div>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <div className="font-bold text-[#22C55E]">${order.total.toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground">{order.taxRate.toFixed(2)}% tax</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold text-[#22C55E]">${order.total.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground">{order.taxRate.toFixed(2)}% tax</div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

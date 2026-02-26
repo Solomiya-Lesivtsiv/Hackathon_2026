@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Progress } from "../components/ui/progress";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { toast } from "sonner";
+import { importCSV, type ImportResult } from "../services/api";
 
 interface CSVRow {
   id: string;
@@ -17,6 +18,7 @@ interface CSVRow {
 export function ImportCSV() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<CSVRow[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [success, setSuccess] = useState(false);
@@ -38,7 +40,7 @@ export function ImportCSV() {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.type === "text/csv") {
+    if (droppedFile && (droppedFile.type === "text/csv" || droppedFile.name.endsWith(".csv"))) {
       processFile(droppedFile);
     } else {
       toast.error("Please drop a valid CSV file");
@@ -52,8 +54,8 @@ export function ImportCSV() {
     }
   };
 
-  const processFile = (file: File) => {
-    setFile(file);
+  const processFile = (f: File) => {
+    setFile(f);
     setSuccess(false);
     setErrors([]);
     setProgress(0);
@@ -62,80 +64,100 @@ export function ImportCSV() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       const lines = text.split("\n").filter((line) => line.trim());
-      const headers = lines[0].split(",").map((h) => h.trim());
 
-      // Validate headers
-      const requiredHeaders = ["id", "latitude", "longitude", "timestamp", "subtotal"];
-      const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
-      
-      if (missingHeaders.length > 0) {
-        setErrors([`Missing required columns: ${missingHeaders.join(", ")}`]);
+      // Handle BOM
+      const firstLine = lines[0].replace(/^\uFEFF/, "");
+      const headers = firstLine.split(",").map((h) => h.trim().toLowerCase());
+
+      // Validate headers — accept common variations
+      const hasId = headers.includes("id") || headers.includes("order_id");
+      const hasLat = headers.includes("latitude") || headers.includes("lat");
+      const hasLon = headers.includes("longitude") || headers.includes("lng") || headers.includes("lon");
+      const hasSubtotal = headers.includes("subtotal") || headers.includes("amount");
+
+      const missing: string[] = [];
+      if (!hasId) missing.push("id");
+      if (!hasLat) missing.push("latitude");
+      if (!hasLon) missing.push("longitude");
+      if (!hasSubtotal) missing.push("subtotal");
+
+      if (missing.length > 0) {
+        setErrors([`Missing required columns: ${missing.join(", ")}`]);
         setFile(null);
         return;
       }
+
+      setTotalRows(lines.length - 1);
+
+      // Map headers to canonical names
+      const idIdx = headers.findIndex(h => h === "id" || h === "order_id");
+      const latIdx = headers.findIndex(h => h === "latitude" || h === "lat");
+      const lonIdx = headers.findIndex(h => h === "longitude" || h === "lng" || h === "lon");
+      const tsIdx = headers.findIndex(h => h === "timestamp" || h === "date");
+      const subIdx = headers.findIndex(h => h === "subtotal" || h === "amount");
 
       // Parse first 5 rows for preview
       const previewRows: CSVRow[] = [];
       for (let i = 1; i < Math.min(6, lines.length); i++) {
         const values = lines[i].split(",").map((v) => v.trim());
-        const row: any = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index] || "";
+        previewRows.push({
+          id: values[idIdx] || "",
+          latitude: values[latIdx] || "",
+          longitude: values[lonIdx] || "",
+          timestamp: tsIdx >= 0 ? (values[tsIdx] || "") : "",
+          subtotal: values[subIdx] || "",
         });
-        previewRows.push(row);
       }
 
       setPreview(previewRows);
     };
-    reader.readAsText(file);
+    reader.readAsText(f);
   };
 
   const handleImport = async () => {
     if (!file) return;
 
     setImporting(true);
-    setProgress(0);
+    setProgress(10);
     setErrors([]);
 
-    // Simulate import process
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      const lines = text.split("\n").filter((line) => line.trim());
-      const totalRows = lines.length - 1; // Exclude header
+    try {
+      // Fake progress while waiting for API
+      const interval = setInterval(() => {
+        setProgress((p) => Math.min(p + 5, 90));
+      }, 300);
 
-      // Simulate processing with progress
-      for (let i = 0; i <= 100; i += 10) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        setProgress(i);
-      }
+      const result: ImportResult = await importCSV(file);
 
-      // Simulate some validation errors (random)
-      const errorList: string[] = [];
-      const errorCount = Math.floor(Math.random() * 3);
-      for (let i = 0; i < errorCount; i++) {
-        const rowNum = Math.floor(Math.random() * totalRows) + 2;
-        errorList.push(`Row ${rowNum}: Invalid coordinate format`);
-      }
-
-      setErrors(errorList);
-      setImportedCount(totalRows - errorCount);
-      setSuccess(true);
-      setImporting(false);
+      clearInterval(interval);
       setProgress(100);
 
-      if (errorCount === 0) {
-        toast.success(`Successfully imported ${totalRows} orders`);
+      const errorList = result.errors.map(
+        (e) => `Row ${e.row}: ${e.error}`
+      );
+      setErrors(errorList);
+      setImportedCount(result.success);
+      setSuccess(true);
+      setImporting(false);
+
+      if (result.failed === 0) {
+        toast.success(`Successfully imported ${result.success} orders`);
       } else {
-        toast.warning(`Imported ${totalRows - errorCount} orders with ${errorCount} errors`);
+        toast.warning(
+          `Imported ${result.success} orders with ${result.failed} errors`
+        );
       }
-    };
-    reader.readAsText(file);
+    } catch (err: any) {
+      setImporting(false);
+      setProgress(0);
+      toast.error(err.message || "Import failed");
+    }
   };
 
   const reset = () => {
     setFile(null);
     setPreview([]);
+    setTotalRows(0);
     setSuccess(false);
     setErrors([]);
     setProgress(0);
@@ -200,7 +222,7 @@ export function ImportCSV() {
                   <li><span className="font-mono">id</span> - Unique order identifier</li>
                   <li><span className="font-mono">latitude</span> - Delivery latitude coordinate</li>
                   <li><span className="font-mono">longitude</span> - Delivery longitude coordinate</li>
-                  <li><span className="font-mono">timestamp</span> - ISO 8601 date/time</li>
+                  <li><span className="font-mono">timestamp</span> - ISO 8601 date/time (optional)</li>
                   <li><span className="font-mono">subtotal</span> - Order amount before tax</li>
                 </ul>
               </div>
@@ -215,7 +237,7 @@ export function ImportCSV() {
                   <div>
                     <p className="font-medium">{file.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {(file.size / 1024).toFixed(2)} KB
+                      {(file.size / 1024).toFixed(2)} KB · {totalRows} rows
                     </p>
                   </div>
                 </div>
@@ -283,7 +305,7 @@ export function ImportCSV() {
                     disabled={importing || errors.length > 0}
                     className="w-full bg-primary hover:bg-primary/90"
                   >
-                    {importing ? "Importing..." : `Import ${preview.length}+ Orders`}
+                    {importing ? "Importing..." : `Import ${totalRows} Orders`}
                   </Button>
                 </>
               )}
@@ -303,7 +325,7 @@ export function ImportCSV() {
                   <AlertCircle className="h-4 w-4 text-orange-600" />
                   <AlertDescription className="text-orange-800">
                     <div className="font-medium mb-1">{errors.length} row(s) failed:</div>
-                    <ul className="list-disc ml-4 text-sm">
+                    <ul className="list-disc ml-4 text-sm max-h-40 overflow-y-auto">
                       {errors.map((error, i) => (
                         <li key={i}>{error}</li>
                       ))}

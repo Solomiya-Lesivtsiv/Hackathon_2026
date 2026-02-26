@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MapPin, DollarSign, Calendar, Navigation } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Label } from "../components/ui/label";
-import { calculateTaxForCoordinates } from "../data/orders";
+import { calculateTax, createOrder, type TaxPreview } from "../services/api";
 import { toast } from "sonner";
 
 export function CreateOrder() {
@@ -14,52 +14,73 @@ export function CreateOrder() {
   const [timestamp, setTimestamp] = useState(
     new Date().toISOString().slice(0, 16)
   );
-  const [taxCalculation, setTaxCalculation] = useState<any>(null);
+  const [taxCalculation, setTaxCalculation] = useState<TaxPreview | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [calcLoading, setCalcLoading] = useState(false);
 
+  // Debounced tax calculation via API
   useEffect(() => {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
     const sub = parseFloat(subtotal);
 
-    if (!isNaN(lat) && !isNaN(lng) && !isNaN(sub) && sub > 0) {
-      const calc = calculateTaxForCoordinates(lat, lng, sub);
-      setTaxCalculation(calc);
-    } else {
+    if (isNaN(lat) || isNaN(lng) || isNaN(sub) || sub <= 0) {
       setTaxCalculation(null);
+      return;
     }
+
+    const timer = setTimeout(async () => {
+      setCalcLoading(true);
+      try {
+        const result = await calculateTax(lat, lng, sub);
+        setTaxCalculation(result);
+      } catch (err) {
+        console.error("Tax calc error:", err);
+        setTaxCalculation(null);
+      } finally {
+        setCalcLoading(false);
+      }
+    }, 400); // debounce 400ms
+
+    return () => clearTimeout(timer);
   }, [latitude, longitude, subtotal]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!latitude || !longitude || !subtotal) {
       toast.error("Please fill in all required fields");
       return;
     }
 
     setSubmitting(true);
+    try {
+      const order = await createOrder({
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        subtotal: parseFloat(subtotal),
+        timestamp: new Date(timestamp).toISOString(),
+      });
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      toast.success(
+        <div>
+          <div className="font-bold">Order Created Successfully!</div>
+          <div className="text-sm">Order ID: {order.id}</div>
+        </div>,
+        { duration: 4000 }
+      );
 
-    const orderId = `ORD-${String(Math.floor(Math.random() * 90000) + 10000).padStart(5, "0")}`;
-    
-    toast.success(
-      <div>
-        <div className="font-bold">Order Created Successfully!</div>
-        <div className="text-sm">Order ID: {orderId}</div>
-      </div>,
-      { duration: 4000 }
-    );
-
-    // Reset form
-    setLatitude("");
-    setLongitude("");
-    setSubtotal("");
-    setTimestamp(new Date().toISOString().slice(0, 16));
-    setTaxCalculation(null);
-    setSubmitting(false);
+      // Reset form
+      setLatitude("");
+      setLongitude("");
+      setSubtotal("");
+      setTimestamp(new Date().toISOString().slice(0, 16));
+      setTaxCalculation(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create order");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const isValidCoordinate = latitude && longitude && !isNaN(parseFloat(latitude)) && !isNaN(parseFloat(longitude));
@@ -219,7 +240,7 @@ export function CreateOrder() {
           {/* Tax Calculation Preview */}
           <Card>
             <CardHeader>
-              <CardTitle>Tax Calculation</CardTitle>
+              <CardTitle>Tax Calculation {calcLoading && <span className="text-xs text-muted-foreground ml-2">calculating...</span>}</CardTitle>
             </CardHeader>
             <CardContent>
               {taxCalculation ? (
@@ -243,7 +264,7 @@ export function CreateOrder() {
                       <span className="font-medium">${taxCalculation.taxBreakdown.city.amount.toFixed(2)}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Special Tax ({taxCalculation.taxBreakdown.special.rate}%)</span>
+                      <span className="text-muted-foreground">MCTD Surcharge ({taxCalculation.taxBreakdown.special.rate}%)</span>
                       <span className="font-medium">${taxCalculation.taxBreakdown.special.amount.toFixed(2)}</span>
                     </div>
                   </div>
