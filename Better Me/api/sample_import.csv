@@ -1,6 +1,6 @@
-order_id,customer_name,customer_email,customer_phone,delivery_address,delivery_lat,delivery_lng,subtotal,priority,status,items
-ORD-TEST-001,Alice Williams,alice.w@email.com,(555) 111-2222,"123 Broadway, New York, NY 10006",40.7089,-74.0110,125.50,express,pending,Widget A;Widget B
-ORD-TEST-002,Bob Thompson,bob.t@email.com,(555) 222-3333,"456 Atlantic Ave, Brooklyn, NY 11217",40.6840,-73.9808,89.99,standard,pending,Premium Package
-ORD-TEST-003,Carol Martinez,carol.m@email.com,(555) 333-4444,"789 Queens Blvd, Queens, NY 11373",40.7396,-73.8789,210.00,urgent,pending,Deluxe Set;Extra Item;Bonus Pack
-ORD-TEST-004,David Brown,david.b@email.com,(555) 444-5555,"321 Grand Concourse, Bronx, NY 10451",40.8275,-73.9271,67.25,standard,pending,Standard Item
-ORD-TEST-005,Emma Garcia,emma.g@email.com,(555) 555-6666,"654 Forest Ave, Staten Island, NY 10310",40.6329,-74.1249,156.80,express,pending,Special Order;Custom Item
+id,latitude,longitude,timestamp,subtotal
+ORD-TEST-001,40.7484,-73.9857,2026-02-28T10:30:00Z,125.50
+ORD-TEST-002,40.6840,-73.9808,2026-02-28T11:15:00Z,89.99
+ORD-TEST-003,40.7396,-73.8789,2026-02-28T12:00:00Z,210.00
+ORD-TEST-004,42.8864,-78.8784,2026-02-28T13:45:00Z,67.25
+ORD-TEST-005,40.6329,-74.1249,2026-02-28T14:30:00Z,156.80
