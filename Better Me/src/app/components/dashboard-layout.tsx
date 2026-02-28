@@ -43,7 +43,8 @@ export function DashboardLayout() {
   };
 
   const handleLogout = () => {
-    logout();
+    localStorage.removeItem('betterme_token');
+    localStorage.removeItem('betterme_user');
     window.location.href = "/login";
   };
 
