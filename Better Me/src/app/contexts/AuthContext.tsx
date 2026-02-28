@@ -1,15 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  avatar?: string;
-  phone?: string;
-  company?: string;
-  createdAt: string;
-}
+import { apiLogin, apiRegister, apiGetMe, apiUpdateProfile, type User } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -18,119 +8,66 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  updateProfile: (data: Partial<User>) => void;
+  updateProfile: (data: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock users database (in production, this would be in your Python backend)
-const MOCK_USERS: Array<User & { password: string }> = [
-  {
-    id: '1',
-    email: 'admin@betterme.com',
-    password: 'admin123',
-    name: 'Admin User',
-    role: 'admin',
-    phone: '(555) 000-0000',
-    company: 'BetterMe Drone Delivery',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    email: 'user@example.com',
-    password: 'user123',
-    name: 'Regular User',
-    role: 'user',
-    phone: '(555) 111-2222',
-    company: 'Example Corp',
-    createdAt: new Date().toISOString(),
-  },
-];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user from localStorage on mount
+  // On mount: check if we have a stored token and validate it
   useEffect(() => {
-    const storedUser = localStorage.getItem('betterme_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        localStorage.removeItem('betterme_user');
-      }
+    const token = localStorage.getItem('betterme_token');
+    if (token) {
+      apiGetMe()
+        .then((u) => setUser(u))
+        .catch(() => {
+          // Token expired or invalid
+          localStorage.removeItem('betterme_token');
+          localStorage.removeItem('betterme_user');
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const foundUser = MOCK_USERS.find(u => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem('betterme_user', JSON.stringify(userWithoutPassword));
+    try {
+      const result = await apiLogin(email, password);
+      localStorage.setItem('betterme_token', result.token);
+      localStorage.setItem('betterme_user', JSON.stringify(result.user));
+      setUser(result.user);
       return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Login failed' };
     }
-
-    return { success: false, error: 'Invalid email or password' };
   };
 
   const register = async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Check if user already exists
-    const existingUser = MOCK_USERS.find(u => u.email === email);
-    if (existingUser) {
-      return { success: false, error: 'Email already registered' };
+    try {
+      const result = await apiRegister(name, email, password);
+      localStorage.setItem('betterme_token', result.token);
+      localStorage.setItem('betterme_user', JSON.stringify(result.user));
+      setUser(result.user);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Registration failed' };
     }
-
-    // Validate password
-    if (password.length < 6) {
-      return { success: false, error: 'Password must be at least 6 characters' };
-    }
-
-    // Create new user
-    const newUser: User & { password: string } = {
-      id: Date.now().toString(),
-      email,
-      password,
-      name,
-      role: 'user', // New users are regular users by default
-      createdAt: new Date().toISOString(),
-    };
-
-    MOCK_USERS.push(newUser);
-
-    const { password: _, ...userWithoutPassword } = newUser;
-    setUser(userWithoutPassword);
-    localStorage.setItem('betterme_user', JSON.stringify(userWithoutPassword));
-
-    return { success: true };
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('betterme_token');
     localStorage.removeItem('betterme_user');
   };
 
-  const updateProfile = (data: Partial<User>) => {
-    if (!user) return;
-
-    const updatedUser = { ...user, ...data };
-    setUser(updatedUser);
-    localStorage.setItem('betterme_user', JSON.stringify(updatedUser));
-
-    // Update in mock database
-    const userIndex = MOCK_USERS.findIndex(u => u.id === user.id);
-    if (userIndex !== -1) {
-      MOCK_USERS[userIndex] = { ...MOCK_USERS[userIndex], ...data };
-    }
+  const updateProfile = async (data: Partial<User>) => {
+    const updated = await apiUpdateProfile(data);
+    setUser(updated);
+    localStorage.setItem('betterme_user', JSON.stringify(updated));
   };
 
   if (isLoading) {
