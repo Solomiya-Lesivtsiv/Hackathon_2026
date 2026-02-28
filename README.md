@@ -1,10 +1,10 @@
-# 🚁 BetterMe — Drone Delivery Tax Admin Panel
+# BetterMe — Drone Delivery Tax Admin Panel
 
 Full-stack web application for managing drone delivery orders with **automatic NY State sales tax calculation** based on GPS coordinates.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -42,7 +42,7 @@ This launches both the backend (Python, port 8000) and frontend (Vite, port 5173
 
 ---
 
-## 📋 Features
+## Features
 
 ### Tax Calculation Engine
 - Automatic NY State sales tax based on GPS coordinates
@@ -74,7 +74,7 @@ This launches both the backend (Python, port 8000) and frontend (Vite, port 5173
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```
 Better Me/
@@ -113,7 +113,7 @@ Better Me/
 
 ---
 
-## 🔌 API Endpoints
+## API Endpoints
 
 ### Auth
 | Method | Endpoint | Description |
@@ -145,7 +145,7 @@ Interactive API docs: **http://localhost:8000/docs**
 
 ---
 
-## 📊 Tax Rates (Publication 718)
+## Tax Rates (Publication 718)
 
 | Location | State | County | City | MCTD | **Composite** |
 |----------|-------|--------|------|------|---------------|
@@ -159,7 +159,7 @@ Interactive API docs: **http://localhost:8000/docs**
 
 ---
 
-## 📁 CSV Import Format
+## CSV Import Format
 
 Required columns: `id`, `latitude`, `longitude`, `subtotal`
 Optional: `timestamp`
@@ -174,7 +174,7 @@ A sample file is included: `api/sample_import.csv`
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
@@ -187,7 +187,7 @@ A sample file is included: `api/sample_import.csv`
 
 ---
 
-## 🧪 Running Backend Independently
+## Running Backend Independently
 
 ```bash
 cd "Better Me/api"
@@ -197,7 +197,7 @@ python main.py
 
 Backend at http://localhost:8000 · Swagger docs at http://localhost:8000/docs
 
-## 🧪 Running Frontend Independently
+## Running Frontend Independently
 
 ```bash
 cd "Better Me"
