@@ -1,82 +1,136 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional
+"""
+Pydantic models for BetterMe Drone Delivery Tax Admin API.
+Covers: Orders, Tax, Auth, Users, Activity Log.
+"""
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
 from datetime import datetime
 
 
+# ── Tax ─────────────────────────────────────────────────────────────────────
+
+class TaxComponent(BaseModel):
+    rate: float
+    amount: float
+
 class TaxBreakdown(BaseModel):
-    state_tax: float
-    state_rate: float
-    county_tax: float
-    county_rate: float
-    city_tax: float
-    city_rate: float
-    special_tax: float
-    special_rate: float
-    total_tax: float
-    total_rate: float
-    jurisdiction: str
-    county: str
-    city: str
+    state: TaxComponent
+    county: TaxComponent
+    city: TaxComponent
+    special: TaxComponent
+    composite: float
+
+class Jurisdiction(BaseModel):
+    name: str
+    type: Literal["State", "County", "City", "Special"]
 
 
-class OrderCreate(BaseModel):
-    order_id: str
-    customer_name: str
-    customer_email: EmailStr
-    customer_phone: str = ""
-    delivery_address: str
-    delivery_lat: float = Field(..., ge=-90, le=90)
-    delivery_lng: float = Field(..., ge=-180, le=180)
-    subtotal: float = Field(..., gt=0)
-    priority: str = Field(..., pattern="^(standard|express|urgent)$")
-    status: str = Field(default="pending", pattern="^(pending|processing|in_transit|delivered|cancelled)$")
-    items: List[str] = []
-
-
-class OrderUpdate(BaseModel):
-    customer_name: Optional[str] = None
-    customer_email: Optional[EmailStr] = None
-    customer_phone: Optional[str] = None
-    delivery_address: Optional[str] = None
-    delivery_lat: Optional[float] = Field(None, ge=-90, le=90)
-    delivery_lng: Optional[float] = Field(None, ge=-180, le=180)
-    subtotal: Optional[float] = Field(None, gt=0)
-    priority: Optional[str] = Field(None, pattern="^(standard|express|urgent)$")
-    status: Optional[str] = Field(None, pattern="^(pending|processing|in_transit|delivered|cancelled)$")
-    items: Optional[List[str]] = None
-    tax_breakdown: Optional[TaxBreakdown] = None
-
+# ── Orders ──────────────────────────────────────────────────────────────────
 
 class Order(BaseModel):
     id: str
-    order_id: str
-    customer_name: str
-    customer_email: str
-    customer_phone: str
-    delivery_address: str
-    delivery_lat: float
-    delivery_lng: float
+    timestamp: str
+    latitude: float
+    longitude: float
     subtotal: float
-    tax_breakdown: TaxBreakdown
+    taxRate: float
+    taxAmount: float
     total: float
-    priority: str
-    status: str
-    items: List[str]
-    created_at: datetime
-    updated_at: datetime
+    jurisdictions: List[Jurisdiction]
+    taxBreakdown: TaxBreakdown
+    userId: Optional[str] = None  # who created this order
 
+class OrderCreate(BaseModel):
+    latitude: float = Field(..., ge=40.0, le=45.1)
+    longitude: float = Field(..., ge=-80.0, le=-71.0)
+    subtotal: float = Field(..., gt=0)
+    timestamp: Optional[str] = None
 
 class TaxCalculationRequest(BaseModel):
-    latitude: float = Field(..., ge=-90, le=90)
-    longitude: float = Field(..., ge=-180, le=180)
+    latitude: float
+    longitude: float
     subtotal: float = Field(..., gt=0)
 
 
-class OrderFilters(BaseModel):
-    search: Optional[str] = None
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    min_amount: Optional[float] = None
-    max_amount: Optional[float] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+# ── Auth ────────────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    email: str
+    password: str = Field(..., min_length=6)
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthResponse(BaseModel):
+    token: str
+    user: "UserPublic"
+
+class UserPublic(BaseModel):
+    """User data returned to frontend (no password)."""
+    id: str
+    email: str
+    name: str
+    role: Literal["admin", "user"]
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    avatar: Optional[str] = None
+    createdAt: str
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
+
+
+# ── User Management (admin) ────────────────────────────────────────────────
+
+class AdminUserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[Literal["admin", "user"]] = None
+    is_active: Optional[bool] = None
+
+class UserWithStats(UserPublic):
+    """User + order statistics for admin panel."""
+    is_active: bool = True
+    totalOrders: int = 0
+    totalSpent: float = 0.0
+    lastActive: Optional[str] = None
+
+
+# ── Activity Log ────────────────────────────────────────────────────────────
+
+class ActivityLog(BaseModel):
+    id: str
+    userId: str
+    userName: str
+    action: str       # e.g. "created_order", "imported_csv", "login", "register"
+    details: str      # human-readable description
+    timestamp: str
+
+
+# ── Response models ─────────────────────────────────────────────────────────
+
+class OrdersListResponse(BaseModel):
+    orders: List[Order]
+    total: int
+    page: int
+    limit: int
+    totalPages: int
+
+class ImportResponse(BaseModel):
+    success: int
+    failed: int
+    orders: List[Order]
+    errors: List[dict]
+
+class StatsResponse(BaseModel):
+    totalOrders: int
+    totalRevenue: float
+    totalTax: float
+    avgTaxRate: float
