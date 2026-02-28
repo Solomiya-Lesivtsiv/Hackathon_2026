@@ -9,7 +9,7 @@ Full-stack web application for managing drone delivery orders with **automatic N
 ### Prerequisites
 
 - **Node.js** 18+ and npm
-- **Python** 3.10+
+- **Python** 3.10 – 3.13 (Python 3.14 is NOT supported — pydantic-core has no prebuilt wheels for it)
 
 ### 1. Install dependencies
 
