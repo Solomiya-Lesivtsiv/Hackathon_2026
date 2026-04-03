@@ -1,8 +1,0 @@
-node_modules
-HEAD
-
-
-orders.db
-*.db
-5ef70f8 (feat: add auth backend (JWT), user management, activity log + connect frontend)
-node_modules
